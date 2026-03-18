@@ -89,3 +89,17 @@ app.post("/auth/login", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
 });
+
+app.get("/posiciones", async (req, res) => {
+  try {
+    const response = await fetch(
+      "https://opensheet.elk.sh/1B5-aI6x9xWTDkFikCpSdnTF4yJ1lZFuXu4PjpPBVICQ/Posiciones",
+    );
+
+    const data = await response.json();
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Error obteniendo posiciones" });
+  }
+});
