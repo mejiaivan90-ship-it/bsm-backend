@@ -28,7 +28,7 @@ app.get("/", (req, res) => {
   res.json({ status: "API funcionando con Sheets" });
 });
 
-// 🔹 POSICIONES (RAW - lo dejamos por si lo necesitas)
+// 🔹 POSICIONES (RAW)
 app.get("/posiciones", async (req, res) => {
   try {
     const data = await getSheetData("Posiciones");
@@ -39,14 +39,13 @@ app.get("/posiciones", async (req, res) => {
   }
 });
 
-// 🔹 POSITIONS (FORMATO PARA APP)
+// 🔹 POSITIONS (FORMATO APP)
 app.get("/positions", async (req, res) => {
   try {
     const { companyName } = req.query;
 
     const data = await getSheetData("Posiciones");
 
-    // 🔹 Filtrar por empresa
     let filtered = data;
 
     if (companyName) {
@@ -57,16 +56,15 @@ app.get("/positions", async (req, res) => {
       );
     }
 
-    // 🔹 Mapear al formato que usa la app
     const positions = filtered.map((item) => ({
       id: item.ID,
       ID: item.ID,
       jobId: `Job${item.ID}`,
-      owner: item.owner,
-      company: item.company,
-      positionLocation: item.positionLocation?.trim(),
-      industry: item.industry,
-      status: item.status,
+      owner: (item.owner || "").trim(),
+      company: (item.company || "").trim(),
+      positionLocation: (item.positionLocation || "").trim(),
+      industry: (item.industry || "").trim(),
+      status: (item.status || "").trim(),
     }));
 
     res.json({
@@ -100,32 +98,36 @@ app.get("/clientes", async (req, res) => {
   }
 });
 
-// 🔹 SCORE CARD
-app.get("/scorecard", async (req, res) => {
+// 🔹 LOGIN (YA CONECTADO A SHEETS)
+app.post("/auth/login", async (req, res) => {
   try {
-    const data = await getSheetData("Score card");
-    res.json({ scorecard: data });
-  } catch (error) {
-    res.status(500).json({ error: "Error obteniendo scorecard" });
-  }
-});
+    const { email, password } = req.body;
 
-// 🔹 LOGIN
-app.post("/auth/login", (req, res) => {
-  const { email, password } = req.body;
+    const data = await getSheetData("Clientes");
 
-  if (email === "cliente@demo.com" && password === "123456") {
+    const user = data.find(
+      (item) =>
+        (item.email || "").toLowerCase().trim() ===
+          String(email).toLowerCase().trim() &&
+        (item.password || "").trim() === String(password).trim(),
+    );
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Credenciales incorrectas",
+      });
+    }
+
     return res.json({
-      token: "demo-token",
-      companyName: "Value GF", // 👈 importante para pruebas reales
-      email,
-      logoUrl: "",
+      token: "real-token",
+      companyName: (user.companyName || "").trim(),
+      email: (user.email || "").trim(),
+      logoUrl: (user.logoUrl || "").trim(),
     });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Error en login" });
   }
-
-  return res.status(401).json({
-    error: "Credenciales incorrectas",
-  });
 });
 
 app.listen(PORT, () => {
