@@ -96,12 +96,14 @@ app.get("/candidates", async (req, res) => {
       return res.status(400).json({ error: "jobId es requerido" });
     }
 
-    const data = await getSheetData("Candidatos");
+    const candidatesData = await getSheetData("Candidatos");
+    const scoreData = await getSheetData("Score Card");
 
     const cleanJobId = String(jobId).replace("Job", "").trim();
 
-    const filtered = data.filter((item) => {
-      const rawId = String(item.ID || "").trim();
+    // 🔥 FILTRAR CANDIDATOS POR JOB
+    const filtered = candidatesData.filter((item) => {
+      const rawId = String(item["ID "] || item.ID || "").trim();
 
       const normalized = rawId.replace("Job", "").replace(/^0+/, "").trim();
 
@@ -110,26 +112,48 @@ app.get("/candidates", async (req, res) => {
       return normalized === target;
     });
 
+    // 🔥 NORMALIZAR NOMBRE (helper)
+    const normalizeName = (name) =>
+      String(name || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // quitar acentos
+        .trim();
+
+    // 🔥 CREAR MAPA DE SCORE POR NOMBRE
+    const scoreMap = {};
+
+    scoreData.forEach((item) => {
+      const name =
+        item.Name || item.Nombre || item.nombre || item.Candidate || "";
+
+      if (!name) return;
+
+      const key = normalizeName(name);
+
+      scoreMap[key] = item;
+    });
+
+    // 🔥 MAP FINAL
     const candidates = filtered.map((item, index) => {
-      // 🔥 INTENTAR LEER NORMAL
-      let firstName = (item.Name || "").trim();
-      let lastName = (item["Last Name"] || "").trim();
-
-      // 🔥 FALLBACK: si viene corrupto (como Tulio)
-      if (!firstName || !lastName) {
-        const rawString = JSON.stringify(item);
-
-        const nameMatch = rawString.match(/Name[:"]+([A-Za-zÁÉÍÓÚáéíóúñÑ\s]+)/);
-        const lastMatch = rawString.match(
-          /Last[^:]*[:"]+([A-Za-zÁÉÍÓÚáéíóúñÑ\s]+)/,
-        );
-
-        if (!firstName && nameMatch) firstName = nameMatch[1].trim();
-        if (!lastName && lastMatch) lastName = lastMatch[1].trim();
-      }
+      const firstName = item["Name "] || item.Name || "";
+      const lastName =
+        item["Last Name "] || item["Last Name"] || item.LastName || "";
 
       const fullName = `${firstName} ${lastName}`.trim();
 
+      const normalizedFullName = normalizeName(fullName);
+
+      const scoreRow = scoreMap[normalizedFullName] || {};
+
+      // 🔥 SCORE
+      const score =
+        Number(scoreRow.Score) ||
+        Number(scoreRow["Score 1-100"]) ||
+        Number(scoreRow.score) ||
+        0;
+
+      // 🔥 ETAPA
       let stage = (item.currentStage || "").trim();
 
       if (!stage) {
@@ -140,17 +164,15 @@ app.get("/candidates", async (req, res) => {
       }
 
       return {
-        id: item.ID || `${jobId}_${index + 1}`,
-        jobId: jobId,
-        name: fullName || "Candidato",
+        id: `${jobId}_${index + 1}`, // 🔥 único
+        jobId,
+        name: fullName,
         firstName,
         lastName,
         status: item.STATUS || "",
         currentStage: stage || "",
-        RCCA: item.RCCA,
-        RIWH: item.RIWH,
-        RCVS: item.RCVS,
-        RCNL: item.RCNL,
+        score: score || 0, // 🔥 AQUI YA VIENE
+        scoreData: scoreRow, // 🔥 DEBUG / futuro
         raw: item,
       };
     });
