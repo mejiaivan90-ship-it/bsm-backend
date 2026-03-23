@@ -87,7 +87,7 @@ app.get("/positions", async (req, res) => {
   }
 });
 
-// 🔹 CANDIDATES (YA FUNCIONANDO CON KEYS LIMPIAS)
+// 🔹 CANDIDATES (ROBUSTO CONTRA DATA SUCIA)
 app.get("/candidates", async (req, res) => {
   try {
     const { jobId } = req.query;
@@ -111,8 +111,22 @@ app.get("/candidates", async (req, res) => {
     });
 
     const candidates = filtered.map((item, index) => {
-      const firstName = (item.Name || "").trim();
-      const lastName = (item["Last Name"] || "").trim();
+      // 🔥 INTENTAR LEER NORMAL
+      let firstName = (item.Name || "").trim();
+      let lastName = (item["Last Name"] || "").trim();
+
+      // 🔥 FALLBACK: si viene corrupto (como Tulio)
+      if (!firstName || !lastName) {
+        const rawString = JSON.stringify(item);
+
+        const nameMatch = rawString.match(/Name[:"]+([A-Za-zÁÉÍÓÚáéíóúñÑ\s]+)/);
+        const lastMatch = rawString.match(
+          /Last[^:]*[:"]+([A-Za-zÁÉÍÓÚáéíóúñÑ\s]+)/,
+        );
+
+        if (!firstName && nameMatch) firstName = nameMatch[1].trim();
+        if (!lastName && lastMatch) lastName = lastMatch[1].trim();
+      }
 
       const fullName = `${firstName} ${lastName}`.trim();
 
