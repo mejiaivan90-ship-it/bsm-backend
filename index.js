@@ -18,7 +18,16 @@ async function getSheetData(sheetName) {
   )}`;
 
   const response = await fetch(url);
-  const data = await response.json();
+  let data = await response.json();
+
+  // 🔥 NORMALIZAR KEYS (quita espacios tipo "ID ")
+  data = data.map((row) => {
+    const newRow = {};
+    Object.keys(row).forEach((key) => {
+      newRow[key.trim()] = row[key];
+    });
+    return newRow;
+  });
 
   return data;
 }
@@ -78,7 +87,7 @@ app.get("/positions", async (req, res) => {
   }
 });
 
-// 🔹 CANDIDATES (CORREGIDO Y ROBUSTO)
+// 🔹 CANDIDATES (YA FUNCIONANDO CON KEYS LIMPIAS)
 app.get("/candidates", async (req, res) => {
   try {
     const { jobId } = req.query;
@@ -89,34 +98,24 @@ app.get("/candidates", async (req, res) => {
 
     const data = await getSheetData("Candidatos");
 
-    // 🔥 NORMALIZAR jobId (Job00210 → 00210)
     const cleanJobId = String(jobId).replace("Job", "").trim();
 
     const filtered = data.filter((item) => {
       const rawId = String(item.ID || "").trim();
 
-      // limpiar todo
-      const normalized = rawId
-        .replace("Job", "")
-        .replace(/^0+/, "") // quitar ceros a la izquierda
-        .trim();
+      const normalized = rawId.replace("Job", "").replace(/^0+/, "").trim();
 
-      const target = cleanJobId
-        .replace(/^0+/, "") // quitar ceros también al target
-        .trim();
+      const target = cleanJobId.replace(/^0+/, "").trim();
 
       return normalized === target;
     });
 
     const candidates = filtered.map((item, index) => {
-      // 🔥 NOMBRE (CORREGIDO: LastName vs Last Name)
-      const firstName = item.Name || "";
-      const lastName =
-        item.LastName || item["Last Name"] || item.lastname || "";
+      const firstName = (item.Name || "").trim();
+      const lastName = (item["Last Name"] || "").trim();
 
       const fullName = `${firstName} ${lastName}`.trim();
 
-      // 🔥 ETAPA (PRIORIDAD A currentStage)
       let stage = (item.currentStage || "").trim();
 
       if (!stage) {
@@ -163,7 +162,7 @@ app.get("/clientes", async (req, res) => {
   }
 });
 
-// 🔹 LOGIN (YA CONECTADO A SHEETS)
+// 🔹 LOGIN
 app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
