@@ -94,9 +94,18 @@ app.get("/candidates", async (req, res) => {
 
     const filtered = data.filter((item) => {
       const rawId = String(item.ID || "").trim();
-      const normalized = rawId.replace("Job", "").trim();
 
-      return normalized === cleanJobId;
+      // limpiar todo
+      const normalized = rawId
+        .replace("Job", "")
+        .replace(/^0+/, "") // quitar ceros a la izquierda
+        .trim();
+
+      const target = cleanJobId
+        .replace(/^0+/, "") // quitar ceros también al target
+        .trim();
+
+      return normalized === target;
     });
 
     const candidates = filtered.map((item, index) => {
