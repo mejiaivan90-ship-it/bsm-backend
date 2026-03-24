@@ -20,7 +20,7 @@ async function getSheetData(sheetName) {
   const response = await fetch(url);
   let data = await response.json();
 
-  // 🔥 NORMALIZAR KEYS (quita espacios tipo "ID ")
+  // 🔥 NORMALIZAR KEYS
   data = data.map((row) => {
     const newRow = {};
     Object.keys(row).forEach((key) => {
@@ -35,6 +35,63 @@ async function getSheetData(sheetName) {
 // 🔹 TEST
 app.get("/", (req, res) => {
   res.json({ status: "API funcionando con Sheets" });
+});
+
+// 🔴 SCORECARD POR ID (FIX LIMPIO Y DEFINITIVO)
+app.get("/scorecard", async (req, res) => {
+  try {
+    const { id = "" } = req.query;
+
+    const clean = (s) =>
+      String(s || "")
+        .toLowerCase()
+        .trim();
+
+    if (!id) {
+      return res.status(400).json({
+        error: "ID requerido",
+      });
+    }
+
+    const rows = await getSheetData("Score card"); // ⚠️ EXACTO como tu sheet
+
+    if (!rows || rows.length === 0) {
+      return res.json({
+        success: true,
+        data: {},
+      });
+    }
+
+    const queryId = clean(id);
+
+    let match = rows.find((row) => {
+      const rowId = clean(row.ID || row.Id || row.id);
+      return rowId === queryId;
+    });
+
+    // 🔥 fallback (por si viene con espacios o formato raro)
+    if (!match) {
+      match = rows.find((row) => {
+        const rowId = clean(row.ID || row.Id || row.id);
+        return rowId.includes(queryId);
+      });
+    }
+
+    if (!match) {
+      return res.json({
+        success: true,
+        data: {},
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: match,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Error obteniendo scorecard" });
+  }
 });
 
 // 🔹 POSICIONES (RAW)
@@ -87,7 +144,7 @@ app.get("/positions", async (req, res) => {
   }
 });
 
-// 🔹 CANDIDATES (ROBUSTO CONTRA DATA SUCIA)
+// 🔹 CANDIDATES
 app.get("/candidates", async (req, res) => {
   try {
     const { jobId } = req.query;
@@ -101,26 +158,20 @@ app.get("/candidates", async (req, res) => {
 
     const cleanJobId = String(jobId).replace("Job", "").trim();
 
-    // 🔥 FILTRAR CANDIDATOS POR JOB
     const filtered = candidatesData.filter((item) => {
       const rawId = String(item["ID "] || item.ID || "").trim();
-
       const normalized = rawId.replace("Job", "").replace(/^0+/, "").trim();
-
       const target = cleanJobId.replace(/^0+/, "").trim();
-
       return normalized === target;
     });
 
-    // 🔥 NORMALIZAR NOMBRE (helper)
     const normalizeName = (name) =>
       String(name || "")
         .toLowerCase()
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "") // quitar acentos
+        .replace(/[\u0300-\u036f]/g, "")
         .trim();
 
-    // 🔥 CREAR MAPA DE SCORE POR NOMBRE
     const scoreMap = {};
 
     scoreData.forEach((item) => {
@@ -130,30 +181,25 @@ app.get("/candidates", async (req, res) => {
       if (!name) return;
 
       const key = normalizeName(name);
-
       scoreMap[key] = item;
     });
 
-    // 🔥 MAP FINAL
     const candidates = filtered.map((item, index) => {
       const firstName = item["Name "] || item.Name || "";
       const lastName =
         item["Last Name "] || item["Last Name"] || item.LastName || "";
 
       const fullName = `${firstName} ${lastName}`.trim();
-
       const normalizedFullName = normalizeName(fullName);
 
       const scoreRow = scoreMap[normalizedFullName] || {};
 
-      // 🔥 SCORE
       const score =
         Number(scoreRow.Score) ||
         Number(scoreRow["Score 1-100"]) ||
         Number(scoreRow.score) ||
         0;
 
-      // 🔥 ETAPA
       let stage = (item.currentStage || "").trim();
 
       if (!stage) {
@@ -164,15 +210,15 @@ app.get("/candidates", async (req, res) => {
       }
 
       return {
-        id: `${jobId}_${index + 1}`, // 🔥 único
+        id: `${jobId}_${index + 1}`,
         jobId,
         name: fullName,
         firstName,
         lastName,
         status: item.STATUS || "",
         currentStage: stage || "",
-        score: score || 0, // 🔥 AQUI YA VIENE
-        scoreData: scoreRow, // 🔥 DEBUG / futuro
+        score: score || 0,
+        scoreData: scoreRow,
         raw: item,
       };
     });
