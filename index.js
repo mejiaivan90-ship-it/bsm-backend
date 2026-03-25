@@ -39,7 +39,7 @@ app.get("/", (req, res) => {
 
 app.get("/scorecard", async (req, res) => {
   try {
-    const { name = "", lastName = "" } = req.query;
+    const { id = "", name = "", lastName = "" } = req.query;
 
     const clean = (s) =>
       String(s || "")
@@ -48,48 +48,57 @@ app.get("/scorecard", async (req, res) => {
         .replace(/[\u0300-\u036f]/g, "")
         .trim();
 
-    if (!name || !lastName) {
-      return res.json({
-        success: true,
-        data: {},
-      });
-    }
-
-    const rows = await getSheetData("Score Card");
+    const rows = await getSheetData("Score card");
 
     if (!rows || rows.length === 0) {
-      return res.json({
-        success: true,
-        data: {},
+      return res.json({ success: true, data: {} });
+    }
+
+    let match = null;
+
+    // 🟢 PRIORIDAD 1: buscar por ID
+    if (id) {
+      const queryId = clean(id);
+
+      match = rows.find((row) => {
+        const rowId = clean(row.ID || row.Id || row.id);
+        return rowId === queryId;
+      });
+
+      if (!match) {
+        match = rows.find((row) => {
+          const rowId = clean(row.ID || row.Id || row.id);
+          return rowId.includes(queryId);
+        });
+      }
+    }
+
+    // 🟡 PRIORIDAD 2: buscar por nombre + apellido
+    if (!match && name && lastName) {
+      const fullQuery = clean(`${name} ${lastName}`);
+
+      match = rows.find((row) => {
+        const rowName = row.Name || row.Nombre || row.Candidate || "";
+
+        const rowLast = row.LastName || row["Last Name"] || row.Apellido || "";
+
+        const fullRow = clean(`${rowName} ${rowLast}`);
+
+        return fullRow === fullQuery;
       });
     }
 
-    const fullQuery = clean(`${name} ${lastName}`);
-
-    let match = rows.find((row) => {
-      const rowName = clean(
-        row.Name || row.Nombre || row.name || row.Candidate || "",
-      );
-
-      return rowName === fullQuery;
-    });
-
-    // 🔥 fallback flexible (MUY IMPORTANTE)
+    // 🔴 SI NO ENCUENTRA
     if (!match) {
-      match = rows.find((row) => {
-        const rowName = clean(
-          row.Name || row.Nombre || row.name || row.Candidate || "",
-        );
-
-        return (
-          rowName.includes(clean(name)) && rowName.includes(clean(lastName))
-        );
+      return res.json({
+        success: true,
+        data: {},
       });
     }
 
     return res.json({
       success: true,
-      data: match || {},
+      data: match,
     });
   } catch (error) {
     console.log(error);
