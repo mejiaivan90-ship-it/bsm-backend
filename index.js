@@ -37,56 +37,106 @@ app.get("/", (req, res) => {
   res.json({ status: "API funcionando con Sheets" });
 });
 
-// 🔴 SCORECARD POR ID (FIX LIMPIO Y DEFINITIVO)
 app.get("/scorecard", async (req, res) => {
   try {
-    const { id = "" } = req.query;
+    const { id = "", jobId = "" } = req.query;
 
     const clean = (s) =>
       String(s || "")
         .toLowerCase()
         .trim();
 
-    if (!id) {
-      return res.status(400).json({
-        error: "ID requerido",
-      });
-    }
+    const normalizeName = (name) =>
+      String(name || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
 
-    const rows = await getSheetData("Score card"); // ⚠️ EXACTO como tu sheet
+    // ⚠️ IMPORTANTE: nombre correcto del sheet
+    const rows = await getSheetData("Score Card");
 
     if (!rows || rows.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // ===============================
+    // ✅ NUEVO: POR JOB ID
+    // ===============================
+    if (jobId) {
+      const candidatesData = await getSheetData("Candidatos");
+
+      const cleanJobId = String(jobId).replace("Job", "").trim();
+
+      const filteredCandidates = candidatesData.filter((item) => {
+        const rawId = String(item["ID "] || item.ID || "").trim();
+        const normalized = rawId.replace("Job", "").replace(/^0+/, "").trim();
+        const target = cleanJobId.replace(/^0+/, "").trim();
+        return normalized === target;
+      });
+
+      const candidateNames = filteredCandidates.map((item) => {
+        const first = item["Name "] || item.Name || "";
+        const last =
+          item["Last Name "] || item["Last Name"] || item.LastName || "";
+        return normalizeName(`${first} ${last}`);
+      });
+
+      const filteredScorecards = rows.filter((row) => {
+        const name =
+          row.Name ||
+          row["Name "] ||
+          row.Nombre ||
+          row.nombre ||
+          row.Candidate ||
+          "";
+
+        const last =
+          row["Last Name"] ||
+          row["Last Name "] ||
+          row.LastName ||
+          row.Apellido ||
+          row.lastName ||
+          "";
+
+        const full = normalizeName(`${name} ${last}`);
+
+        return candidateNames.includes(full);
+      });
+
       return res.json({
         success: true,
-        data: {},
+        data: filteredScorecards,
       });
     }
 
-    const queryId = clean(id);
+    // ===============================
+    // ✅ ORIGINAL (NO SE ROMPE)
+    // ===============================
+    if (id) {
+      const queryId = clean(id);
 
-    let match = rows.find((row) => {
-      const rowId = clean(row.ID || row.Id || row.id);
-      return rowId === queryId;
-    });
-
-    // 🔥 fallback (por si viene con espacios o formato raro)
-    if (!match) {
-      match = rows.find((row) => {
+      let match = rows.find((row) => {
         const rowId = clean(row.ID || row.Id || row.id);
-        return rowId.includes(queryId);
+        return rowId === queryId;
       });
-    }
 
-    if (!match) {
+      if (!match) {
+        match = rows.find((row) => {
+          const rowId = clean(row.ID || row.Id || row.id);
+          return rowId.includes(queryId);
+        });
+      }
+
       return res.json({
         success: true,
-        data: {},
+        data: match || {},
       });
     }
 
     return res.json({
       success: true,
-      data: match,
+      data: [],
     });
   } catch (error) {
     console.log(error);
